@@ -1,0 +1,5 @@
+feedparser
+groq
+alpaca-py
+requests
+python-dotenv

@@ -1,0 +1,7 @@
+.env
+seen_articles.json
+trades.db
+*.log
+__pycache__/
+*.pyc
+.DS_Store
