@@ -255,10 +255,12 @@ def is_eod() -> bool:
     return t.hour > EOD_CLOSE[0] or (t.hour == EOD_CLOSE[0] and t.minute >= EOD_CLOSE[1])
 
 def secs_until(hour: int, minute: int) -> float:
+    from datetime import timedelta
     t      = now_et()
     target = t.replace(hour=hour, minute=minute, second=0, microsecond=0)
-    diff   = (target - t).total_seconds()
-    return max(diff, 0)
+    if target <= t:
+        target += timedelta(days=1)  # already passed today — aim for tomorrow
+    return (target - t).total_seconds()
 
 # ── RSS helpers ────────────────────────────────────────────────────────────────
 
@@ -480,17 +482,20 @@ def main():
     print(f"  Phase 1 (Pre-Market): {PREMARKET_START[0]}:00–{MARKET_OPEN[0]}:{MARKET_OPEN[1]:02d} ET")
     print(f"  Phase 2 (Intraday):   {MARKET_OPEN[0]}:{MARKET_OPEN[1]:02d}–{INTRADAY_END[0]}:{INTRADAY_END[1]:02d} ET\n")
 
-    monitor_thread = threading.Thread(target=monitor_positions, args=(alpaca,), daemon=True)
-    monitor_thread.start()
-
     seen            = load_seen()
     session_tickers = set()
 
-    # ── Phase 1: Pre-Market ────────────────────────────────────────────────────
+    # ── Wait until 7:00 AM ET (handles overnight scheduling) ──────────────────
     wait = secs_until(*PREMARKET_START)
     if wait > 0:
-        print(f"  Waiting {int(wait//60)}m {int(wait%60)}s until 7:00 AM ET…")
+        hrs, rem = divmod(int(wait), 3600)
+        mins     = rem // 60
+        print(f"  Waiting {hrs}h {mins}m until 7:00 AM ET tomorrow…")
         time.sleep(wait)
+
+    # Start position monitor only after we've reached the trading day
+    monitor_thread = threading.Thread(target=monitor_positions, args=(alpaca,), daemon=True)
+    monitor_thread.start()
 
     if in_premarket_window():
         run_scan_loop(groq_client, alpaca, seen, session_tickers,
